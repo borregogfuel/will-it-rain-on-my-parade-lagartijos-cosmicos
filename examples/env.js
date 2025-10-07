@@ -1,0 +1,3 @@
+window.__ENV__ = {
+  OPENWEATHER_API_KEY: "${OPENWEATHER_API_KEY}"
+};
