@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test - Weather App</title>
+    <style>
+        body { margin: 0; padding: 20px; font-family: Arial, sans-serif; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        canvas { border: 1px solid #000; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Weather App Test</h1>
+    
+    <div class="test-section info">
+        <h3>Test Instructions</h3>
+        <p>This page tests the weather app components individually to identify any issues.</p>
+    </div>
+
+    <div class="test-section">
+        <h3>1. Three.js Import Test</h3>
+        <div id="three-test">Testing Three.js import...</div>
+    </div>
+
+    <div class="test-section">
+        <h3>2. Texture Loading Test</h3>
+        <div id="texture-test">Testing texture loading...</div>
+    </div>
+
+    <div class="test-section">
+        <h3>3. Renderer Test</h3>
+        <canvas id="test-canvas" width="400" height="300"></canvas>
+        <div id="renderer-test">Testing renderer...</div>
+    </div>
+
+    <div class="test-section">
+        <h3>4. Globe Creation Test</h3>
+        <div id="globe-test">Testing globe creation...</div>
+    </div>
+
+    <script type="module">
+        // Test 1: Three.js Import
+        try {
+            const THREE = await import('https://unpkg.com/three@0.160.0/build/three.module.js');
+            document.getElementById('three-test').innerHTML = 
+                '<span style="color: green;">✓ Three.js loaded successfully (v' + THREE.REVISION + ')</span>';
+        } catch (error) {
+            document.getElementById('three-test').innerHTML = 
+                '<span style="color: red;">✗ Three.js failed to load: ' + error.message + '</span>';
+        }
+
+        // Test 2: Texture Loading
+        try {
+            const THREE = await import('https://unpkg.com/three@0.160.0/build/three.module.js');
+            const loader = new THREE.TextureLoader();
+            
+            const testTexture = loader.load(
+                './frontend/examples/textures/planets/earth_day_4096.jpg',
+                (texture) => {
+                    document.getElementById('texture-test').innerHTML = 
+                        '<span style="color: green;">✓ Day texture loaded successfully (' + texture.image.width + 'x' + texture.image.height + ')</span>';
+                },
+                undefined,
+                (error) => {
+                    document.getElementById('texture-test').innerHTML = 
+                        '<span style="color: red;">✗ Day texture failed to load: ' + error.message + '</span>';
+                }
+            );
+        } catch (error) {
+            document.getElementById('texture-test').innerHTML = 
+                '<span style="color: red;">✗ Texture loading test failed: ' + error.message + '</span>';
+        }
+
+        // Test 3: Renderer
+        try {
+            const THREE = await import('https://unpkg.com/three@0.160.0/build/three.module.js');
+            
+            // Try WebGPU first
+            let renderer;
+            try {
+                if (typeof THREE.WebGPURenderer !== 'undefined') {
+                    renderer = new THREE.WebGPURenderer({canvas: document.getElementById('test-canvas')});
+                    document.getElementById('renderer-test').innerHTML = 
+                        '<span style="color: green;">✓ WebGPU renderer created successfully</span>';
+                } else {
+                    throw new Error('WebGPURenderer not available');
+                }
+            } catch (error) {
+                renderer = new THREE.WebGLRenderer({canvas: document.getElementById('test-canvas')});
+                document.getElementById('renderer-test').innerHTML = 
+                    '<span style="color: orange;">⚠ WebGPU not available, using WebGL renderer</span>';
+            }
+            
+            renderer.setSize(400, 300);
+            
+        } catch (error) {
+            document.getElementById('renderer-test').innerHTML = 
+                '<span style="color: red;">✗ Renderer creation failed: ' + error.message + '</span>';
+        }
+
+        // Test 4: Globe Creation
+        try {
+            const THREE = await import('https://unpkg.com/three@0.160.0/build/three.module.js');
+            
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, 400/300, 0.1, 1000);
+            camera.position.z = 5;
+            
+            const geometry = new THREE.SphereGeometry(1, 32, 32);
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            const sphere = new THREE.Mesh(geometry, material);
+            scene.add(sphere);
+            
+            document.getElementById('globe-test').innerHTML = 
+                '<span style="color: green;">✓ Globe created successfully</span>';
+            
+        } catch (error) {
+            document.getElementById('globe-test').innerHTML = 
+                '<span style="color: red;">✗ Globe creation failed: ' + error.message + '</span>';
+        }
+    </script>
+</body>
+</html>
