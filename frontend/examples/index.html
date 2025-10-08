@@ -6,7 +6,6 @@
         "imports": {
             "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
             "three/webgpu": "https://unpkg.com/three@0.160.0/examples/jsm/capabilities/WebGPU.js",
-            "three/tsl": "https://unpkg.com/three@0.160.0/examples/jsm/nodes/tsl/tsl.js",
             "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
         }
     }
@@ -169,7 +168,6 @@
 
 <script type="module">
 import * as THREE from 'three';
-import { step, normalWorldGeometry, output, texture, vec3, vec4, normalize, positionWorld, bumpMap, cameraPosition, color, uniform, mix, uv, max } from 'three/tsl';
 
 let camera, scene, renderer, globe, clock, starLayers;
 let targetPosition = new THREE.Vector3(0,0,5);
@@ -275,58 +273,26 @@ function init() {
     );
 
     const sphereGeometry = new THREE.SphereGeometry(1,64,64);
-    const globeMaterial = new THREE.MeshStandardNodeMaterial();
     
-    // Try TSL nodes, fallback to basic material if not available
-    try {
-        const cloudsStrength = texture(bumpRoughnessCloudsTexture, uv()).b.smoothstep(0.2,1);
-        globeMaterial.colorNode = mix(texture(dayTexture), vec3(1), cloudsStrength.mul(2));
-        const roughness = max(texture(bumpRoughnessCloudsTexture).g, step(0.01, cloudsStrength));
-        globeMaterial.roughnessNode = roughness.remap(0,1,uniform(1), uniform(0.2));
-    } catch (error) {
-        console.warn('TSL nodes not available, using basic material:', error);
-        // Fallback to basic material properties
-        globeMaterial.map = dayTexture;
-        globeMaterial.roughness = 0.8;
-        globeMaterial.metalness = 0.1;
-    }
+    // Use standard Three.js material (no TSL nodes)
+    const globeMaterial = new THREE.MeshStandardMaterial({
+        map: dayTexture,
+        normalMap: bumpRoughnessCloudsTexture,
+        roughnessMap: bumpRoughnessCloudsTexture,
+        roughness: 0.8,
+        metalness: 0.1
+    });
     
-    // Try TSL atmosphere, fallback to basic if not available
-    try {
-        // Solo usar textura de día - eliminar efectos de noche
-        const viewDirection = positionWorld.sub(cameraPosition).normalize();
-        const fresnel = viewDirection.dot(normalWorldGeometry).abs().oneMinus().toVar();
-        const atmosphereDayColor = uniform(color('#4479a2'));
-        const atmosphereMix = fresnel.pow(2).clamp(0,1);
-        
-        // Solo textura de día + atmósfera
-        let finalOutput = globeMaterial.colorNode;
-        finalOutput = mix(finalOutput, atmosphereDayColor, atmosphereMix);
-        globeMaterial.outputNode = vec4(finalOutput, output.a);
-        
-        const bumpElevation = max(texture(bumpRoughnessCloudsTexture).r, cloudsStrength);
-        globeMaterial.normalNode = bumpMap(bumpElevation);
-        
-        const atmosphereMaterial = new THREE.MeshBasicNodeMaterial({side: THREE.BackSide, transparent:true});
-        let alpha = fresnel.remap(0.73,1,1,0).pow(3);
-        // Atmósfera siempre visible - no depende de la orientación del sol
-        atmosphereMaterial.outputNode = vec4(atmosphereDayColor, alpha);
-        const atmosphere = new THREE.Mesh(sphereGeometry, atmosphereMaterial);
-        atmosphere.scale.setScalar(1.04);
-        scene.add(atmosphere);
-    } catch (error) {
-        console.warn('TSL atmosphere not available, using basic atmosphere:', error);
-        // Basic atmosphere fallback
-        const atmosphereMaterial = new THREE.MeshBasicMaterial({
-            color: 0x4479a2,
-            transparent: true,
-            opacity: 0.3,
-            side: THREE.BackSide
-        });
-        const atmosphere = new THREE.Mesh(sphereGeometry, atmosphereMaterial);
-        atmosphere.scale.setScalar(1.04);
-        scene.add(atmosphere);
-    }
+    // Create simple atmosphere
+    const atmosphereMaterial = new THREE.MeshBasicMaterial({
+        color: 0x4479a2,
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.BackSide
+    });
+    const atmosphere = new THREE.Mesh(sphereGeometry, atmosphereMaterial);
+    atmosphere.scale.setScalar(1.04);
+    scene.add(atmosphere);
     
     globe = new THREE.Mesh(sphereGeometry, globeMaterial);
     scene.add(globe);
