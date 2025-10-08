@@ -4,9 +4,10 @@
     <script type="importmap">
     {
         "imports": {
-            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-            "three/webgpu": "https://unpkg.com/three@0.160.0/examples/jsm/capabilities/WebGPU.js",
-            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            "three": "../build/three.webgpu.js",
+            "three/webgpu": "../build/three.webgpu.js",
+            "three/tsl": "../build/three.tsl.js",
+            "three/addons/": "./jsm/"
         }
     }
     </script>
@@ -168,6 +169,7 @@
 
 <script type="module">
 import * as THREE from 'three';
+import { step, normalWorldGeometry, output, texture, vec3, vec4, normalize, positionWorld, bumpMap, cameraPosition, color, uniform, mix, uv, max } from 'three/tsl';
 
 let camera, scene, renderer, globe, clock, starLayers;
 let targetPosition = new THREE.Vector3(0,0,5);
@@ -191,112 +193,54 @@ const fadeDurationOut = 1000; // ms
 init();
 
 function init() {
-    console.log('Initializing Three.js application...');
     clock = new THREE.Clock();
     camera = new THREE.PerspectiveCamera(25, window.innerWidth/window.innerHeight, 0.1, 500);
     camera.position.set(0,0,5);
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
-    console.log('Scene created successfully');
 
     const sun = new THREE.DirectionalLight('#ffffff', 2.5);
     sun.position.set(3,0,3);
     scene.add(sun);
 
     const textureLoader = new THREE.TextureLoader();
-    
-    // Load textures with error handling
-    const dayTexture = textureLoader.load(
-        './textures/planets/earth_day_4096.jpg',
-        undefined, // onLoad
-        undefined, // onProgress
-        (error) => {
-            console.error('Failed to load day texture:', error);
-            // Create a fallback texture
-            const canvas = document.createElement('canvas');
-            canvas.width = 1024;
-            canvas.height = 512;
-            const ctx = canvas.getContext('2d');
-            const gradient = ctx.createLinearGradient(0, 0, 0, 512);
-            gradient.addColorStop(0, '#87CEEB');
-            gradient.addColorStop(0.3, '#98FB98');
-            gradient.addColorStop(0.7, '#228B22');
-            gradient.addColorStop(1, '#006400');
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 1024, 512);
-            return new THREE.CanvasTexture(canvas);
-        }
-    );
+    const dayTexture = textureLoader.load('./textures/planets/earth_day_4096.jpg');
     dayTexture.colorSpace = THREE.SRGBColorSpace;
-    
-    const nightTexture = textureLoader.load(
-        './textures/planets/earth_night_4096.jpg',
-        undefined,
-        undefined,
-        (error) => {
-            console.error('Failed to load night texture:', error);
-            // Create a simple dark texture
-            const canvas = document.createElement('canvas');
-            canvas.width = 1024;
-            canvas.height = 512;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#000033';
-            ctx.fillRect(0, 0, 1024, 512);
-            return new THREE.CanvasTexture(canvas);
-        }
-    );
+    const nightTexture = textureLoader.load('./textures/planets/earth_night_4096.jpg');
     nightTexture.colorSpace = THREE.SRGBColorSpace;
-    
-    const bumpRoughnessCloudsTexture = textureLoader.load(
-        './textures/planets/earth_bump_roughness_clouds_4096.jpg',
-        undefined,
-        undefined,
-        (error) => {
-            console.error('Failed to load bump texture:', error);
-            // Create a simple noise texture
-            const canvas = document.createElement('canvas');
-            canvas.width = 1024;
-            canvas.height = 512;
-            const ctx = canvas.getContext('2d');
-            const imageData = ctx.createImageData(1024, 512);
-            for (let i = 0; i < imageData.data.length; i += 4) {
-                const value = Math.random() * 255;
-                imageData.data[i] = value;     // R
-                imageData.data[i + 1] = value; // G
-                imageData.data[i + 2] = value; // B
-                imageData.data[i + 3] = 255;   // A
-            }
-            ctx.putImageData(imageData, 0, 0);
-            return new THREE.CanvasTexture(canvas);
-        }
-    );
+    const bumpRoughnessCloudsTexture = textureLoader.load('./textures/planets/earth_bump_roughness_clouds_4096.jpg');
 
     const sphereGeometry = new THREE.SphereGeometry(1,64,64);
+    const globeMaterial = new THREE.MeshStandardNodeMaterial();
+    const cloudsStrength = texture(bumpRoughnessCloudsTexture, uv()).b.smoothstep(0.2,1);
+    globeMaterial.colorNode = mix(texture(dayTexture), vec3(1), cloudsStrength.mul(2));
+    const roughness = max(texture(bumpRoughnessCloudsTexture).g, step(0.01, cloudsStrength));
+    globeMaterial.roughnessNode = roughness.remap(0,1,uniform(1), uniform(0.2));
     
-    // Use standard Three.js material (no TSL nodes)
-    const globeMaterial = new THREE.MeshStandardMaterial({
-        map: dayTexture,
-        normalMap: bumpRoughnessCloudsTexture,
-        roughnessMap: bumpRoughnessCloudsTexture,
-        roughness: 0.8,
-        metalness: 0.1
-    });
+    // Solo usar textura de día - eliminar efectos de noche
+    const viewDirection = positionWorld.sub(cameraPosition).normalize();
+    const fresnel = viewDirection.dot(normalWorldGeometry).abs().oneMinus().toVar();
+    const atmosphereDayColor = uniform(color('#4479a2'));
+    const atmosphereMix = fresnel.pow(2).clamp(0,1);
     
-    // Create simple atmosphere
-    const atmosphereMaterial = new THREE.MeshBasicMaterial({
-        color: 0x4479a2,
-        transparent: true,
-        opacity: 0.3,
-        side: THREE.BackSide
-    });
+    // Solo textura de día + atmósfera
+    let finalOutput = globeMaterial.colorNode;
+    finalOutput = mix(finalOutput, atmosphereDayColor, atmosphereMix);
+    globeMaterial.outputNode = vec4(finalOutput, output.a);
+    
+    const bumpElevation = max(texture(bumpRoughnessCloudsTexture).r, cloudsStrength);
+    globeMaterial.normalNode = bumpMap(bumpElevation);
+    globe = new THREE.Mesh(sphereGeometry, globeMaterial);
+    scene.add(globe);
+
+    const atmosphereMaterial = new THREE.MeshBasicNodeMaterial({side: THREE.BackSide, transparent:true});
+    let alpha = fresnel.remap(0.73,1,1,0).pow(3);
+    // Atmósfera siempre visible - no depende de la orientación del sol
+    atmosphereMaterial.outputNode = vec4(atmosphereDayColor, alpha);
     const atmosphere = new THREE.Mesh(sphereGeometry, atmosphereMaterial);
     atmosphere.scale.setScalar(1.04);
     scene.add(atmosphere);
-    
-    globe = new THREE.Mesh(sphereGeometry, globeMaterial);
-    scene.add(globe);
-    console.log('Globe created and added to scene');
 
     function createStarField(count, radius, minSize, maxSize, speedRange){
         const positions = new Float32Array(count*3);
@@ -334,20 +278,7 @@ function init() {
         createStarField(8000,140,1.0,2.0,[0.9,1.3])
     ];
 
-    // Try WebGPU first, fallback to WebGL
-    try {
-        if (typeof THREE.WebGPURenderer !== 'undefined') {
-            renderer = new THREE.WebGPURenderer({canvas:document.querySelector('#bg-canvas'), antialias:true});
-            console.log('WebGPU renderer initialized successfully');
-        } else {
-            throw new Error('WebGPURenderer not available');
-        }
-    } catch (error) {
-        console.warn('WebGPU not supported, falling back to WebGL:', error);
-        renderer = new THREE.WebGLRenderer({canvas:document.querySelector('#bg-canvas'), antialias:true});
-        console.log('WebGL renderer initialized successfully');
-    }
-    
+    renderer = new THREE.WebGPURenderer({canvas:document.querySelector('#bg-canvas'), antialias:true});
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setAnimationLoop(animate);
@@ -959,7 +890,7 @@ function extractLocationFromText(text) {
 // Geocoding function to convert any location text to coordinates
 async function geocodeLocation(query) {
     try {
-    const apiKey = (typeof window !== 'undefined' && window.__ENV__ && window.__ENV__.OPENWEATHER_API_KEY) || '';
+        const apiKey = '4db24631eb6cabd90f3e51f71e66e990';
         const response = await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(query)}&limit=1&appid=${apiKey}`);
         
         if (!response.ok) {
@@ -1071,10 +1002,7 @@ function latLonToVector3(lat, lon, radius){
 async function fetchWeatherData(lat, lon) {
     try {
         // Using OpenWeatherMap API (free tier) - replace with your API key
-        const apiKey = (typeof window !== 'undefined' && window.__ENV__ && window.__ENV__.OPENWEATHER_API_KEY) || '';
-        if (!apiKey) {
-            console.warn('OpenWeatherMap API key is not set. Set window.__ENV__.OPENWEATHER_API_KEY or use a .env / hosting secret. Falling back to local mock data.');
-        }
+        const apiKey = '4db24631eb6cabd90f3e51f71e66e990'; // Replace with actual API key from openweathermap.org
         const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`);
         
         if (!response.ok) {
